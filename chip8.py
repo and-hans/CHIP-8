@@ -1,6 +1,16 @@
 class Chip8:
     def __init__(self):
-        self.memory = bytearray(4096)
-        self.PC = 0  # program counter
-        self.index = 0  # I register
-        self.stack = 0 
+        self.memory = bytearray(4096)  # memory/RAM
+        self.pc = 0  # program counter
+        # registers
+        self.index = 0  # I/index register
+        self.sp = 0  # stack pointer register
+        self.timers = {  # delay and sound timers
+            'delay' : 0,
+            'sound' : 0
+        }
+        self.reg = {}  # stores 16 general purpose registers
+        for i in range(16):
+            self.reg['v'+str(hex(i))[2:]] = 0
+
+
