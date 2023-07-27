@@ -8,6 +8,8 @@ Y = 4-bit value, upper 4-bits of the last 8-bits of an instruction (low byte)
 KK = 8-bit value, lowest 8-bits of the 16-bit instruction
 """
 # <-- End of Instruction Variables -->
+from collections import deque
+
 
 class Chip8:
     def __init__(self):
@@ -15,7 +17,7 @@ class Chip8:
         self.pc = 0x200  # program counter  (starts at 512 or 0x200)
         # registers
         self.index = 0  # I/index register
-        self.sp = 0x52  # stack pointer register (starts at 82 or 0x52)
+        self.sp = 0x52  # stack pointer register (starts at 82 or 0x52), but for now it's just for show
         self.timers = {  # delay and sound timers
             'delay' : 0,
             'sound' : 0
@@ -23,6 +25,8 @@ class Chip8:
         self.register = {}  # stores 16 general purpose registers
         for i in range(16):
             self.register['v'+str(hex(i))[2:]] = 0
+        # stack
+        self.stack = deque()
         # others
         self.current_opcode = '0000'  # current operation
         fonts = [
@@ -50,13 +54,19 @@ class Chip8:
     def decode_execute(self, opcode: str):
         # since Python doesn't have in case statements, I'll have to use if's
         if opcode[0] == '0':  # [0NNN] -> execute machine language routine
-            pass
-        elif opcode == '00E0':  # clears the display
-            self.clear_display()
+            if opcode[1] != '0':
+                print("Instruction 0NNN has not be inmplemented")
+            else:
+                if opcode == '00E0':
+                    self.clear_display()
+                elif opcode == '00EE':
+                    self.pc = self.stack.popleft()
         elif opcode[0] == '1':  # [1NNN] -> jump routine
-            pass
+            self.pc = int(opcode[1:], 16) - 2
         elif opcode[0] == '2':  # [2NNN] -> call subroutines
-            pass
+            self.sp += 1
+            self.stack.appendleft(self.pc)
+            self.pc = int(opcode[1:], 16) - 2
         elif opcode[0] == '3':  # [3XNN] -> conditional: skip instruction if VX == NN
             pass
         elif opcode[0] == '4':  # [4XNN] -> conditional: skip instruction if VX != NN
