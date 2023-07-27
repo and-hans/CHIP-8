@@ -1,3 +1,14 @@
+# used Cowgod's Chip-8 guide for reference to the ISA and general configuration
+# <-- Instruction Variables -->
+"""
+NNN = 12-bit value, lower 12-bits of the 16-bit instruction
+N = 4-bit value, lower 4-bits of the 16-bit instruction
+X = 4-bit value, lower 4-bits of first 8-bits of an instruction (high byte)
+Y = 4-bit value, upper 4-bits of the last 8-bits of an instruction (low byte)
+KK = 8-bit value, lowest 8-bits of the 16-bit instruction
+"""
+# <-- End of Instruction Variables -->
+
 class Chip8:
     def __init__(self):
         self.memory = bytearray(4096)  # memory/RAM
@@ -52,7 +63,7 @@ class Chip8:
             pass
         elif opcode[0] == '5':  # [5XY0] -> conditional: skip instruction if VX == VY
             pass
-        elif opcode[0] == '6':  # [6XNN] -> set: set vx to nn
+        elif opcode[0] == '6':  # [6XNN] -> set: set VX to NN
             pass
         elif opcode[0] == '7':  # [7XNN] -> arthimetic: adds NN to VX (carry flag does not change)
             pass
