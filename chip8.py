@@ -131,15 +131,15 @@ class Chip8:
                 pass
         elif opcode[0] == 'F':  # [FX--] -> handles memory, bcd, timers, and keyboard
             if opcode[2:] == '07':  # set VX = DT value
-                pass
+                self.register['v'+opcode[1]] = self.timers['dt']
             elif opcode[2:] == '0A':  # wait for a key press, and then store the value of the key in Vx
                 pass
             elif opcode[2:] == '15':  # set DT = VX
-                pass
+                self.timers['dt'] = self.register['v'+opcode[1]]
             elif opcode[2:] == '18':  # set ST = VX
-                pass
+                self.timers['st'] = self.register['v'+opcode[1]]
             elif opcode[2:] == '1E':  # set I = I + VX
-                pass
+                self.index += self.register['v'+opcode[1]]
             elif opcode[2:] == '29':  # set I = location of sprite for digit Vx
                 pass
             elif opcode[2:] == '33':  # store BCD representation of Vx in memory locations I, I+1, and I+2
