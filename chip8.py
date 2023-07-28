@@ -18,9 +18,9 @@ class Chip8:
         # registers
         self.index = 0  # I/index register
         self.sp = 0x52  # stack pointer register (starts at 82 or 0x52), but for now it's just for show
-        self.timers = {  # delay and sound timers
-            'delay' : 0,
-            'sound' : 0
+        self.timers = {  # delay (DT) and sound timers (ST)
+            'dt' : 0,
+            'st' : 0
         }
         self.register = {}  # stores 16 general purpose registers
         for i in range(16):
@@ -68,31 +68,86 @@ class Chip8:
             self.stack.appendleft(self.pc)
             self.pc = int(opcode[1:], 16) - 2
         elif opcode[0] == '3':  # [3XNN] -> conditional: skip instruction if VX == NN
-            pass
+            if self.register['v'+opcode[1]] == int(opcode[2:], 16):
+                self.pc += 2
         elif opcode[0] == '4':  # [4XNN] -> conditional: skip instruction if VX != NN
-            pass
+            if self.register['v'+opcode[1]] != int(opcode[2:], 16):
+                self.pc += 2
         elif opcode[0] == '5':  # [5XY0] -> conditional: skip instruction if VX == VY
-            pass
+            if self.register['v'+opcode[1]] == self.register['v'+opcode[2]]:
+                self.pc += 2
         elif opcode[0] == '6':  # [6XNN] -> set: set VX to NN
-            pass
-        elif opcode[0] == '7':  # [7XNN] -> arthimetic: adds NN to VX (carry flag does not change)
-            pass
+            self.register['v'+opcode[1]] = int(opcode[2:], 16)
+        elif opcode[0] == '7':  # [7XNN] -> arthimetic: adds NN to VX, and stores the value in VX (carry flag does not change)
+            self.register['v'+opcode[1]] += int(opcode[2:], 16)
         elif opcode[0] == '8':  # [8XY-] -> arthimetic: logical operations 
-            pass
+            if opcode[3] == '0':  # set VX = VY
+               self.register['v'+opcode[1]] = self.register['v'+opcode[2]] 
+            elif opcode[3] == '1':  # set VX = (VX OR VY)
+                self.register['v'+opcode[1]] = self.register['v'+opcode[1]] | self.register['v'+opcode[2]]
+            elif opcode[3] == '2':  # set VX = (VX AND VY)
+                self.register['v'+opcode[1]] = self.register['v'+opcode[1]] & self.register['v'+opcode[2]]
+            elif opcode[3] == '3':  # set VX = (VX XOR VY)
+                self.register['v'+opcode[1]] = self.register['v'+opcode[1]] ^ self.register['v'+opcode[2]]
+            elif opcode[3] == '4':  # set VX = VX + VY, carry flag used
+                temp = self.register['v'+opcode[1]] + self.register['v'+opcode[2]]
+                if temp > 254:  # if value is greater than 8-bits, set carry flag
+                    self.register['vf'] = 1
+                    self.register['v'+opcode[1]] = (temp << 8) & 0xFF  # only the lower 8-bits should be stored
+                else: 
+                    self.register['vf'] = 0
+                    self.register['v'+opcode[1]] = temp
+            elif opcode[3] == '5':  # set VX = VX-VY, carry flag used
+                if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
+                    self.register['vf'] = 1
+                else:
+                    self.register['vf'] = 0
+                self.register['v'+opcode[1]] =- self.register['v'+opcode[2]]
+            elif opcode[3] == '6':
+                pass
+            elif opcode[3] == '7':  # set VX = VY-VX, carry flag used
+                if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
+                    self.register['vf'] = 1
+                else:
+                    self.register['vf'] = 0
+                self.register['v'+opcode[1]] = self.register['v'+opcode[2]] - self.register['v'+opcode[1]]
+            elif opcode[3] == 'E':
+                pass
         elif opcode[0] == '9':  # [9XY0] -> conditional: skips the next instruction if VX != VY
-            pass
+            if self.register['v'+opcode[1]] != self.register['v'+opcode[2]]:
+                self.pc += 2
         elif opcode[0] == 'A':  # [ANNN] -> set: sets index to address NNN
-            pass
+            self.index = int(opcode[1:], 16)
         elif opcode[0] == 'B':  # [BNNN] -> jump: jumps (+ offset) to address NNN+V0 
-            pass
+            self.index = int(opcode[1:], 16) +  self.register['v0']
         elif opcode[0] == 'C':  # [CXNN] -> ANDs NN with a random number and puts it in reg VX
             pass
         elif opcode[0] == 'D':  # [DXYN] -> draw to screen (VX, VY, N)
             pass
         elif opcode[0] == 'E':  # [EX--] -> keyboard conditional
-            pass
+            if opcode[2:] == '9E':  # skip next instruction if key with the value of Vx is pressed
+                pass
+            elif opcode[2:] == 'A1':  # skip next instruction if key with the value of Vx is not pressed
+                pass
         elif opcode[0] == 'F':  # [FX--] -> handles memory, bcd, timers, and keyboard
-            pass
+            if opcode[2:] == '07':  # set VX = DT value
+                pass
+            elif opcode[2:] == '0A':  # wait for a key press, and then store the value of the key in Vx
+                pass
+            elif opcode[2:] == '15':  # set DT = VX
+                pass
+            elif opcode[2:] == '18':  # set ST = VX
+                pass
+            elif opcode[2:] == '1E':  # set I = I + VX
+                pass
+            elif opcode[2:] == '29':  # set I = location of sprite for digit Vx
+                pass
+            elif opcode[2:] == '33':  # store BCD representation of Vx in memory locations I, I+1, and I+2
+                pass
+            elif opcode[2:] == '55':  # store registers V0 through Vx in memory starting at location I
+                pass
+            elif opcode[2:] == '65':  # read registers V0 through Vx from memory starting at location I
+                pass
         # increment the program counter by 2 after each operation
         self.pc += 2  
 
