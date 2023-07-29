@@ -8,6 +8,8 @@ Y = 4-bit value, upper 4-bits of the last 8-bits of an instruction (low byte)
 KK = 8-bit value, lowest 8-bits of the 16-bit instruction
 """
 # <-- End of Instruction Variables -->
+import pygame
+import sys
 from collections import deque
 
 
@@ -29,6 +31,7 @@ class Chip8:
         self.stack = deque()
         # others
         self.current_opcode = '0000'  # current operation
+        # font
         fonts = [
             0xF0, 0x90, 0x90, 0x90, 0xF0, # 0
             0x20, 0x60, 0x20, 0x20, 0x70, # 1
@@ -49,6 +52,14 @@ class Chip8:
         ]
         for i in range(len(fonts)):  # load the font set into memory
             self.memory[i] = fonts[i]
+        # keyboard input settings
+        self.keyboard = {  # key mappings changed from orginal to make things easier on modern keyboards
+            pygame.K_1: 0x1, pygame.K_2: 0x2, pygame.K_3: 0x3, pygame.K_4: 0xC,
+            pygame.K_q: 0x4, pygame.K_w: 0x5, pygame.K_e: 0x6, pygame.K_r: 0xD,
+            pygame.K_a: 0x7, pygame.K_s: 0x8, pygame.K_d: 0x9, pygame.K_f: 0xE,
+            pygame.K_z: 0xA, pygame.K_x: 0x0, pygame.K_c: 0xB, pygame.K_v: 0xF
+        }
+        self.keys = [0 for i in range(16)]  # 16 possible keys, with K_x being the first
 
     # <--- Execute --->
     def decode_execute(self, opcode: str):
@@ -156,6 +167,24 @@ class Chip8:
                 pass
         # increment the program counter by 2 after each operation
         self.pc += 2  
+        # check for key input
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+            elif event.type == pygame.KEYDOWN:
+                if event.key in self.keyboard:  # check if the key is valid
+                    for key, value in self.keyboard.items():
+                        if key == event.key:
+                            self.keys[value] = 1  # set the specific key to true
+                elif event.key == pygame.K_ESCAPE:  # quit program if the escape was pressed
+                    pygame.quit()
+                    sys.exit(0)
+            elif event.type == pygame.KEYUP:
+               if event.key in self.keyboard:  # check if the key is valid
+                    for key, value in self.keyboard.items():
+                        if key == event.key:
+                            self.keys[value] = 0  # set the specific key to false
 
     # <--- Fetch --->
     def fetch_instr(self, operation: str=None):
