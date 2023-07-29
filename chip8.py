@@ -17,7 +17,7 @@ class Chip8:
         self.pc = 0x200  # program counter  (starts at 512 or 0x200)
         # registers
         self.index = 0  # I/index register
-        self.sp = 0x52  # stack pointer register (starts at 82 or 0x52), but for now it's just for show
+        self.sp = 0  # stack pointer register, but for now it's just for show
         self.timers = {  # delay (DT) and sound timers (ST)
             'dt' : 0,
             'st' : 0
@@ -90,6 +90,9 @@ class Chip8:
             elif opcode[3] == '3':  # set VX = (VX XOR VY)
                 self.register['v'+opcode[1]] = self.register['v'+opcode[1]] ^ self.register['v'+opcode[2]]
             elif opcode[3] == '4':  # set VX = VX + VY, carry flag used
+                '''
+                Probably did this wrong
+                '''
                 temp = self.register['v'+opcode[1]] + self.register['v'+opcode[2]]
                 if temp > 254:  # if value is greater than 8-bits, set carry flag
                     self.register['vf'] = 1
@@ -98,6 +101,9 @@ class Chip8:
                     self.register['vf'] = 0
                     self.register['v'+opcode[1]] = temp
             elif opcode[3] == '5':  # set VX = VX-VY, carry flag used
+                '''
+                Probably did this wrong too
+                '''
                 if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
                     self.register['vf'] = 1
                 else:
