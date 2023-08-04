@@ -9,12 +9,15 @@ KK = 8-bit value, lowest 8-bits of the 16-bit instruction
 """
 # <-- End of Instruction Variables -->
 import pygame
+import numpy as np
 import sys
 from collections import deque
 
+pygame.init()
 
 class Chip8:
-    def __init__(self):
+    def __init__(self, scale, filename):
+        self.filename = filename
         self.memory = bytearray(4096)  # memory/RAM
         self.pc = 0x200  # program counter  (starts at 512 or 0x200)
         # registers
@@ -60,6 +63,15 @@ class Chip8:
             pygame.K_z: 0xA, pygame.K_x: 0x0, pygame.K_c: 0xB, pygame.K_v: 0xF
         }
         self.keys = [0 for i in range(16)]  # 16 possible keys, with K_x being the first
+        # screen and pygame settings
+        self.grid = np.zeros([32, 64])
+        self.HEIGHT = 64 * scale
+        self.WIDTH = 32 * scale
+        self.clock = pygame.time.Clock()
+        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), pygame.HWSURFACE|pygame.DOUBLEBUF)
+        pygame.display.set_caption(f"Chip-8 Emulator - {self.filname[:-4]}")
+        self.screen.fill([0, 0, 0])
+        pygame.display.flip()
 
     # <--- Execute --->
     def decode_execute(self, opcode: str):
@@ -69,7 +81,7 @@ class Chip8:
                 print("Instruction 0NNN has not be inmplemented")
             else:
                 if opcode == '00E0':
-                    self.clear_display()
+                    self.grid = np.zeros([32, 64])
                 elif opcode == '00EE':
                     self.pc = self.stack.popleft()
         elif opcode[0] == '1':  # [1NNN] -> jump routine
@@ -140,7 +152,16 @@ class Chip8:
         elif opcode[0] == 'C':  # [CXNN] -> ANDs NN with a random number and puts it in reg VX
             pass
         elif opcode[0] == 'D':  # [DXYN] -> draw to screen (VX, VY, N)
-            pass
+            vx = self.register['v'+opcode[1]]
+            vy = self.register['v'+opcode[2]]
+            sprite = self.memory[self.index: self.index+int(opcode[3])]
+            sprite_arrays = []
+            for i in sprite:
+                
+            if self.draw(sprite, vx, vy):
+                self.register['vf'] = 1
+            else:
+                self.register['vf'] = 0
         elif opcode[0] == 'E':  # [EX--] -> keyboard conditional
             if opcode[2:] == '9E':  # skip next instruction if key with the value of Vx is pressed
                 pass
@@ -185,7 +206,6 @@ class Chip8:
                     for key, value in self.keyboard.items():
                         if key == event.key:
                             self.keys[value] = 0  # set the specific key to false
-
     # <--- Fetch --->
     def fetch_instr(self, operation: str=None):
         if operation:
@@ -196,8 +216,11 @@ class Chip8:
             self.current_opcode = high + low  # 16 bit instruction
             self.decode_execute(self.current_opcode)
     # <--- Display Functions --->
-    def clear_display(self):
-        pass
-
-    def draw(self):
-        pass
+    def draw(self, sprite : list, vx : int, vy : int):
+        collided = False
+        for i in range(len(sprite)):
+            for j in range(8):
+                if self.grid[vy + i][vx + j] == 1 and int(sprite[i][j]) == 1:
+                    collided = True
+                self.grid[vy + i][vx + j] = self.grid[vy + i][vx + j] ^ int(sprite[i][j])
+        return collided
