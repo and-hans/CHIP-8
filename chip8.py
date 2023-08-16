@@ -64,9 +64,10 @@ class Chip8:
         }
         self.keys = [0 for i in range(16)]  # 16 possible keys, with K_x being the first
         # screen and pygame settings
-        self.grid = np.zeros([32, 64])
+        self.grid = np.zeros([32, 64])  # screen pixel grid
         self.HEIGHT = 64 * scale
         self.WIDTH = 32 * scale
+        # basic pygame setup
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), pygame.HWSURFACE|pygame.DOUBLEBUF)
         pygame.display.set_caption(f"Chip-8 Emulator - {self.filname[:-4]}")
@@ -132,16 +133,20 @@ class Chip8:
                 else:
                     self.register['vf'] = 0
                 self.register['v'+opcode[1]] =- self.register['v'+opcode[2]]
-            elif opcode[3] == '6':
-                pass
+            elif opcode[3] == '6':  # Set Vx = Vx SHR 1
+                # if the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0
+                self.register['vf'] = self.register['v'+opcode[1]] & 0x1
+                self.register['v'+opcode[1]] >>= 1  # shift right
             elif opcode[3] == '7':  # set VX = VY-VX, carry flag used
                 if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
                     self.register['vf'] = 1
                 else:
                     self.register['vf'] = 0
                 self.register['v'+opcode[1]] = self.register['v'+opcode[2]] - self.register['v'+opcode[1]]
-            elif opcode[3] == 'E':
-                pass
+            elif opcode[3] == 'E':  # Set Vx = Vx SHL 1
+                # if the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0
+                self.register['vf'] = (self.register['v'+opcode[1]] & 0x80) >> 7   # either 7 or 8
+                self.register['v'+opcode[1]] <<= 1  # left right
         elif opcode[0] == '9':  # [9XY0] -> conditional: skips the next instruction if VX != VY
             if self.register['v'+opcode[1]] != self.register['v'+opcode[2]]:
                 self.pc += 2
@@ -154,11 +159,8 @@ class Chip8:
         elif opcode[0] == 'D':  # [DXYN] -> draw to screen (VX, VY, N)
             vx = self.register['v'+opcode[1]]
             vy = self.register['v'+opcode[2]]
-            sprite = self.memory[self.index: self.index+int(opcode[3])]
-            sprite_arrays = []
-            for i in sprite:
-                
-            if self.draw(sprite, vx, vy):
+            sprite = self.memory[self.index: self.index+int(opcode[3])]  # grab the sprite from memory
+            if self.draw(sprite, vx, vy):  # raise flag if a collision occured/pixel was erased 
                 self.register['vf'] = 1
             else:
                 self.register['vf'] = 0
@@ -220,7 +222,9 @@ class Chip8:
         collided = False
         for i in range(len(sprite)):
             for j in range(8):
+                # if a pixel in the sprite was erased, set the collision to True
                 if self.grid[vy + i][vx + j] == 1 and int(sprite[i][j]) == 1:
                     collided = True
+                # CHIP-8 XOR's the bits of the sprite onto the screen
                 self.grid[vy + i][vx + j] = self.grid[vy + i][vx + j] ^ int(sprite[i][j])
         return collided
