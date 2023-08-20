@@ -10,6 +10,7 @@ KK = 8-bit value, lowest 8-bits of the 16-bit instruction
 # <-- End of Instruction Variables -->
 import pygame
 import numpy as np
+import random
 import sys
 from collections import deque
 
@@ -146,7 +147,7 @@ class Chip8:
             elif opcode[3] == 'E':  # Set Vx = Vx SHL 1
                 # if the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0
                 self.register['vf'] = (self.register['v'+opcode[1]] & 0x80) >> 7   # either 7 or 8
-                self.register['v'+opcode[1]] <<= 1  # left right
+                self.register['v'+opcode[1]] <<= 1  # left shift
         elif opcode[0] == '9':  # [9XY0] -> conditional: skips the next instruction if VX != VY
             if self.register['v'+opcode[1]] != self.register['v'+opcode[2]]:
                 self.pc += 2
@@ -155,7 +156,9 @@ class Chip8:
         elif opcode[0] == 'B':  # [BNNN] -> jump: jumps (+ offset) to address NNN+V0 
             self.index = int(opcode[1:], 16) +  self.register['v0']
         elif opcode[0] == 'C':  # [CXNN] -> ANDs NN with a random number and puts it in reg VX
-            pass
+            randnum = random.randint(0, 255)  # generate a random number between 0 and 255
+            # AND the random number with NN, and then store it in register VX
+            self.register['v'+opcode[1]] = int(opcode[2:], 16) & randnum
         elif opcode[0] == 'D':  # [DXYN] -> draw to screen (VX, VY, N)
             vx = self.register['v'+opcode[1]]
             vy = self.register['v'+opcode[2]]
@@ -166,14 +169,27 @@ class Chip8:
                 self.register['vf'] = 0
         elif opcode[0] == 'E':  # [EX--] -> keyboard conditional
             if opcode[2:] == '9E':  # skip next instruction if key with the value of Vx is pressed
-                pass
+                vx_key = self.register['v'+opcode[1]]
+                # if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2
+                if self.keys[vx_key]:
+                    self.pc += 2
             elif opcode[2:] == 'A1':  # skip next instruction if key with the value of Vx is not pressed
-                pass
+                vx_key = self.register['v'+opcode[1]]
+                # if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2
+                if not self.keys[vx_key]:
+                    self.pc += 2
         elif opcode[0] == 'F':  # [FX--] -> handles memory, bcd, timers, and keyboard
             if opcode[2:] == '07':  # set VX = DT value
                 self.register['v'+opcode[1]] = self.timers['dt']
             elif opcode[2:] == '0A':  # wait for a key press, and then store the value of the key in Vx
-                pass
+                key_pressed = False
+                while not key_pressed:
+                    event = pygame.event.wait()  # wait for an event 
+                    self.keyboard(event_overide=event)  # check keyboard with event
+                    for i in range(len(self.keys)):  # loop through all the keys
+                        if self.keys[i]:  # if the key was pressed, then store it in memory VX
+                            self.register['v'+opcode[1]] = i  
+                            key_pressed = True
             elif opcode[2:] == '15':  # set DT = VX
                 self.timers['dt'] = self.register['v'+opcode[1]]
             elif opcode[2:] == '18':  # set ST = VX
@@ -191,7 +207,48 @@ class Chip8:
         # increment the program counter by 2 after each operation
         self.pc += 2  
         # check for key input
+        # for event in pygame.event.get():
+        #     if event.type == pygame.QUIT:
+        #         pygame.quit()
+        #         sys.exit(0)
+        #     elif event.type == pygame.KEYDOWN:
+        #         if event.key in self.keyboard:  # check if the key is valid
+        #             for key, value in self.keyboard.items():
+        #                 if key == event.key:
+        #                     self.keys[value] = 1  # set the specific key to true
+        #         elif event.key == pygame.K_ESCAPE:  # quit program if the escape was pressed
+        #             pygame.quit()
+        #             sys.exit(0)
+        #     elif event.type == pygame.KEYUP:
+        #        if event.key in self.keyboard:  # check if the key is valid
+        #             for key, value in self.keyboard.items():
+        #                 if key == event.key:
+        #                     self.keys[value] = 0  # set the specific key to false
+    # <--- Fetch --->
+    def fetch_instr(self, operation: str=None):
+        if operation:
+            self.opcode = operation  # used for debugging
+        else:
+            high = self.memory[self.pc]  # high bit
+            low = self.memory[self.pc + 1]  # low bit
+            self.current_opcode = high + low  # 16 bit instruction
+            self.decode_execute(self.current_opcode)
+    # <--- Display Functionality --->
+    def draw(self, sprite : list, vx : int, vy : int):
+        collided = False
+        for i in range(len(sprite)):
+            for j in range(8):
+                # if a pixel in the sprite was erased, set the collision to True
+                if self.grid[vy + i][vx + j] == 1 and int(sprite[i][j]) == 1:
+                    collided = True
+                # CHIP-8 XOR's the bits of the sprite onto the screen
+                self.grid[vy + i][vx + j] = self.grid[vy + i][vx + j] ^ int(sprite[i][j])
+        return collided
+    # <--- Keyboard Functionality --->
+    def keyboard(self, event_overide: pygame.event.Event=None):
         for event in pygame.event.get():
+            if event_overide:  # set the loop event to the custom event (this may serve useful for later on)
+                event=event_overide
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit(0)
@@ -208,23 +265,3 @@ class Chip8:
                     for key, value in self.keyboard.items():
                         if key == event.key:
                             self.keys[value] = 0  # set the specific key to false
-    # <--- Fetch --->
-    def fetch_instr(self, operation: str=None):
-        if operation:
-            self.opcode = operation  # used for debugging
-        else:
-            high = self.memory[self.pc]  # high bit
-            low = self.memory[self.pc + 1]  # low bit
-            self.current_opcode = high + low  # 16 bit instruction
-            self.decode_execute(self.current_opcode)
-    # <--- Display Functions --->
-    def draw(self, sprite : list, vx : int, vy : int):
-        collided = False
-        for i in range(len(sprite)):
-            for j in range(8):
-                # if a pixel in the sprite was erased, set the collision to True
-                if self.grid[vy + i][vx + j] == 1 and int(sprite[i][j]) == 1:
-                    collided = True
-                # CHIP-8 XOR's the bits of the sprite onto the screen
-                self.grid[vy + i][vx + j] = self.grid[vy + i][vx + j] ^ int(sprite[i][j])
-        return collided
