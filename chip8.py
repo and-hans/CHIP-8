@@ -71,9 +71,11 @@ class Chip8:
         # basic pygame setup
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), pygame.HWSURFACE|pygame.DOUBLEBUF)
-        pygame.display.set_caption(f"Chip-8 Emulator - {self.filname[:-4]}")
+        pygame.display.set_caption(f"Chip-8 Emulator - {self.filename[:-4]}")
         self.screen.fill([0, 0, 0])
         pygame.display.flip()
+        # read program
+        self.read_rom(0x200)
 
     # <--- Execute --->
     def decode_execute(self, opcode: str):
@@ -240,8 +242,13 @@ class Chip8:
         if operation:
             self.opcode = operation  # used for debugging
         else:
-            high = self.memory[self.pc]  # high bit
-            low = self.memory[self.pc + 1]  # low bit
+            high = hex(self.memory[self.pc])[2:]  # high bit
+            low = hex(self.memory[self.pc + 1])[2:]  # low bit
+            # add padding to hex value
+            if len(high) == 1:
+                high = '0' + high
+            elif len(low) == 1:
+                low = '0' + low
             self.current_opcode = high + low  # 16 bit instruction
             self.decode_execute(self.current_opcode)
     # <--- Display Functionality --->
@@ -276,3 +283,22 @@ class Chip8:
                     for key, value in self.keyboard.items():
                         if key == event.key:
                             self.keys[value] = 0  # set the specific key to false
+    # <--- Reset Functionality --->
+    def reset(self):
+        pass
+    # <--- Read ROM --->
+    def read_rom(self, offset):
+        self.reset()  # reset everything to it's default values
+        data = open(self.filename, 'rb').read()
+        # store data in memory
+        for index, value in enumerate(data):
+            self.memory[offset+index] = value
+    # <--- Processor Cycle Functionality -->
+    def run(self, speed: int=16*16):
+        for _ in range(speed):
+            self.fetch_instr()
+
+
+if __name__ == '__main__':
+    cpu = Chip8(5, 'Pong.ch8')
+    cpu.run()
