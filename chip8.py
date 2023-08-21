@@ -197,13 +197,24 @@ class Chip8:
             elif opcode[2:] == '1E':  # set I = I + VX
                 self.index += self.register['v'+opcode[1]]
             elif opcode[2:] == '29':  # set I = location of sprite for digit Vx
-                pass
+                self.index = self.register['v'+opcode[1]]*5  # sprites are 5 bytes long (8x5 pixels)
             elif opcode[2:] == '33':  # store BCD representation of Vx in memory locations I, I+1, and I+2
-                pass
+                '''
+                hundreds -> index
+                tens -> index+1
+                ones -> index+2
+                '''
+                bcd = self.register['v'+opcode[1]]
+                # load BCD values into memory address pointed at the address loaded into the index register
+                self.memory[self.index] = bcd[0]
+                self.memory[self.index + 1] = bcd[1]
+                self.memory[self.index + 2] = bcd[2]
             elif opcode[2:] == '55':  # store registers V0 through Vx in memory starting at location I
-                pass
+                for i in range(int(opcode[1])+1):
+                    self.memory[self.index + i] = self.register[f'v{i}']
             elif opcode[2:] == '65':  # read registers V0 through Vx from memory starting at location I
-                pass
+                for i in range(int(opcode[1])+1):
+                    self.register[f'v{i}'] = self.memory[self.index + i]
         # increment the program counter by 2 after each operation
         self.pc += 2  
         # check for key input
