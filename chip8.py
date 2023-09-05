@@ -14,12 +14,11 @@ import random
 import sys
 from collections import deque
 
-pygame.init()
 
 class Chip8:
     def __init__(self, scale, filename):
         self.filename = filename
-        self.memory = bytearray(4096)  # memory/RAM
+        self.memory = np.zeros(4096, np.uint8)#bytearray(4096)  # memory/RAM
         self.pc = 0x200  # program counter  (starts at 512 or 0x200)
         # registers
         self.index = 0  # I/index register
@@ -57,6 +56,7 @@ class Chip8:
         for i in range(len(fonts)):  # load the font set into memory
             self.memory[i] = fonts[i]
         # keyboard input settings
+        pygame.init()
         self.keyboard = {  # key mappings changed from orginal to make things easier on modern keyboards
             pygame.K_1: 0x1, pygame.K_2: 0x2, pygame.K_3: 0x3, pygame.K_4: 0xC,
             pygame.K_q: 0x4, pygame.K_w: 0x5, pygame.K_e: 0x6, pygame.K_r: 0xD,
@@ -65,15 +65,16 @@ class Chip8:
         }
         self.keys = [0 for i in range(16)]  # 16 possible keys, with K_x being the first
         # screen and pygame settings
-        self.grid = np.zeros([32, 64])  # screen pixel grid
-        self.HEIGHT = 64 * scale
-        self.WIDTH = 32 * scale
+        self.scale = scale
+        self.grid = np.zeros([32, 64], np.int8)  # screen pixel grid
+        self.HEIGHT = 32 * scale
+        self.WIDTH = 64 * scale
         # basic pygame setup
-        self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), pygame.HWSURFACE|pygame.DOUBLEBUF)
         pygame.display.set_caption(f"Chip-8 Emulator - {self.filename[:-4]}")
         self.screen.fill([0, 0, 0])
         pygame.display.flip()
+        self.draw_flag = False
         # read program
         self.read_rom(0x200)
 
@@ -82,11 +83,11 @@ class Chip8:
         # since Python doesn't have in case statements, I'll have to use if's
         if opcode[0] == '0':  # [0NNN] -> execute machine language routine
             if opcode[1] != '0':
-                print("Instruction 0NNN has not be inmplemented")
+                print("Instruction 0NNN has not be implemented")
             else:
-                if opcode == '00E0':
-                    self.grid = np.zeros([32, 64])
-                elif opcode == '00EE':
+                if opcode == '00e0':
+                    self.grid = np.zeros([64, 32], np.int16)
+                elif opcode == '00ee':
                     self.pc = self.stack.popleft()
         elif opcode[0] == '1':  # [1NNN] -> jump routine
             self.pc = int(opcode[1:], 16) - 2
@@ -153,41 +154,41 @@ class Chip8:
         elif opcode[0] == '9':  # [9XY0] -> conditional: skips the next instruction if VX != VY
             if self.register['v'+opcode[1]] != self.register['v'+opcode[2]]:
                 self.pc += 2
-        elif opcode[0] == 'A':  # [ANNN] -> set: sets index to address NNN
+        elif opcode[0] == 'a':  # [ANNN] -> set: sets index to address NNN
             self.index = int(opcode[1:], 16)
-        elif opcode[0] == 'B':  # [BNNN] -> jump: jumps (+ offset) to address NNN+V0 
+        elif opcode[0] == 'b':  # [BNNN] -> jump: jumps (+ offset) to address NNN+V0 
             self.index = int(opcode[1:], 16) +  self.register['v0']
-        elif opcode[0] == 'C':  # [CXNN] -> ANDs NN with a random number and puts it in reg VX
+        elif opcode[0] == 'c':  # [CXNN] -> ANDs NN with a random number and puts it in reg VX
             randnum = random.randint(0, 255)  # generate a random number between 0 and 255
             # AND the random number with NN, and then store it in register VX
             self.register['v'+opcode[1]] = int(opcode[2:], 16) & randnum
-        elif opcode[0] == 'D':  # [DXYN] -> draw to screen (VX, VY, N)
-            vx = self.register['v'+opcode[1]]
-            vy = self.register['v'+opcode[2]]
-            sprite = self.memory[self.index: self.index+int(opcode[3])]  # grab the sprite from memory
-            if self.draw(sprite, vx, vy):  # raise flag if a collision occured/pixel was erased 
+        elif opcode[0] == 'd':  # [DXYN] -> draw to screen (VX, VY, N)
+            vx = self.register['v'+opcode[1]]  # x-coordinate
+            vy = self.register['v'+opcode[2]]  # y-coordinate
+            self.draw(vx, vy, int(opcode[3]))  # change pixels (actual display is dealt with in the "run" method)
+            if self.draw_flag:  # raise flag if a collision occured/pixel was erased (could probably just put this in the function itself)
                 self.register['vf'] = 1
             else:
                 self.register['vf'] = 0
-        elif opcode[0] == 'E':  # [EX--] -> keyboard conditional
-            if opcode[2:] == '9E':  # skip next instruction if key with the value of Vx is pressed
+        elif opcode[0] == 'e':  # [EX--] -> keyboard conditional
+            if opcode[2:] == '9e':  # skip next instruction if key with the value of Vx is pressed
                 vx_key = self.register['v'+opcode[1]]
                 # if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2
                 if self.keys[vx_key]:
                     self.pc += 2
-            elif opcode[2:] == 'A1':  # skip next instruction if key with the value of Vx is not pressed
+            elif opcode[2:] == 'a1':  # skip next instruction if key with the value of Vx is not pressed
                 vx_key = self.register['v'+opcode[1]]
                 # if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2
                 if not self.keys[vx_key]:
                     self.pc += 2
-        elif opcode[0] == 'F':  # [FX--] -> handles memory, bcd, timers, and keyboard
+        elif opcode[0] == 'f':  # [FX--] -> handles memory, bcd, timers, and keyboard
             if opcode[2:] == '07':  # set VX = DT value
                 self.register['v'+opcode[1]] = self.timers['dt']
-            elif opcode[2:] == '0A':  # wait for a key press, and then store the value of the key in Vx
+            elif opcode[2:] == '0a':  # wait for a key press, and then store the value of the key in Vx
                 key_pressed = False
                 while not key_pressed:
                     event = pygame.event.wait()  # wait for an event 
-                    self.keyboard(event_overide=event)  # check keyboard with event
+                    self.keyboard_control(event_overide=event)  # check keyboard with event
                     for i in range(len(self.keys)):  # loop through all the keys
                         if self.keys[i]:  # if the key was pressed, then store it in memory VX
                             self.register['v'+opcode[1]] = i  
@@ -196,7 +197,7 @@ class Chip8:
                 self.timers['dt'] = self.register['v'+opcode[1]]
             elif opcode[2:] == '18':  # set ST = VX
                 self.timers['st'] = self.register['v'+opcode[1]]
-            elif opcode[2:] == '1E':  # set I = I + VX
+            elif opcode[2:] == '1e':  # set I = I + VX
                 self.index += self.register['v'+opcode[1]]
             elif opcode[2:] == '29':  # set I = location of sprite for digit Vx
                 self.index = self.register['v'+opcode[1]]*5  # sprites are 5 bytes long (8x5 pixels)
@@ -208,37 +209,34 @@ class Chip8:
                 '''
                 bcd = self.register['v'+opcode[1]]
                 # load BCD values into memory address pointed at the address loaded into the index register
-                self.memory[self.index] = bcd[0]
-                self.memory[self.index + 1] = bcd[1]
-                self.memory[self.index + 2] = bcd[2]
+                self.memory[self.index] = bcd // 100
+                self.memory[self.index + 1] = (bcd // 10) % 10
+                self.memory[self.index + 2] = bcd % 10
+                print(self.memory[self.index])
+                print(self.memory[self.index+1])
+                print(self.memory[self.index+2])
             elif opcode[2:] == '55':  # store registers V0 through Vx in memory starting at location I
-                for i in range(int(opcode[1])+1):
-                    self.memory[self.index + i] = self.register[f'v{i}']
+                for i in range(int(opcode[1])+1, 16):
+                    reg = hex(i)[2:]
+                    self.memory[self.index + i] = self.register[f'v{reg}']
             elif opcode[2:] == '65':  # read registers V0 through Vx from memory starting at location I
                 for i in range(int(opcode[1])+1):
-                    self.register[f'v{i}'] = self.memory[self.index + i]
+                    reg = hex(i)[2:]
+                    self.register[f'v{reg}'] = self.memory[self.index + i]
         # increment the program counter by 2 after each operation
         self.pc += 2  
-        # check for key input
-        # for event in pygame.event.get():
-        #     if event.type == pygame.QUIT:
-        #         pygame.quit()
-        #         sys.exit(0)
-        #     elif event.type == pygame.KEYDOWN:
-        #         if event.key in self.keyboard:  # check if the key is valid
-        #             for key, value in self.keyboard.items():
-        #                 if key == event.key:
-        #                     self.keys[value] = 1  # set the specific key to true
-        #         elif event.key == pygame.K_ESCAPE:  # quit program if the escape was pressed
-        #             pygame.quit()
-        #             sys.exit(0)
-        #     elif event.type == pygame.KEYUP:
-        #        if event.key in self.keyboard:  # check if the key is valid
-        #             for key, value in self.keyboard.items():
-        #                 if key == event.key:
-        #                     self.keys[value] = 0  # set the specific key to false
+        # increment the timers if they contain non-zero values 
+        while self.timers != 0:
+            if self.timers['dt'] == 0:
+                break
+            self.timers['dt'] -= 1
+        while self.timers != 0:
+            if self.timers['st'] == 0:
+                break
+            self.timers['st'] -= 1
     # <--- Fetch --->
     def fetch_instr(self, operation: str=None):
+        #self.index = self.pc
         if operation:
             self.opcode = operation  # used for debugging
         else:
@@ -247,23 +245,41 @@ class Chip8:
             # add padding to hex value
             if len(high) == 1:
                 high = '0' + high
-            elif len(low) == 1:
+            if len(low) == 1:
                 low = '0' + low
             self.current_opcode = high + low  # 16 bit instruction
             self.decode_execute(self.current_opcode)
     # <--- Display Functionality --->
-    def draw(self, sprite : list, vx : int, vy : int):
+    def draw(self, vx : int, vy : int, n : int):
         collided = False
-        for i in range(len(sprite)):
+        for i in range(n):
+            pixel = self.memory[self.index + i]
             for j in range(8):
-                # if a pixel in the sprite was erased, set the collision to True
-                if self.grid[vy + i][vx + j] == 1 and int(sprite[i][j]) == 1:
-                    collided = True
-                # CHIP-8 XOR's the bits of the sprite onto the screen
-                self.grid[vy + i][vx + j] = self.grid[vy + i][vx + j] ^ int(sprite[i][j])
-        return collided
+                if (pixel & (0x80 >> j)) != 0:
+                    try:
+                        if self.grid[vy+i][vx+j] == 1:
+                            collided = True
+                        self.grid[vy + i][vx + j] ^= 1
+                    except:
+                        continue
+        if collided:
+            self.draw_flag = True
+    def display_loop(self):
+        # draws pixels (really just rectangles) on the screen according to the grid
+        rows, cols = self.grid.shape
+        for i in range(rows):
+            for j in range(cols):
+                colour = [0, 0, 0]  # black
+                # if the cell (address) contains a '1', then a white pixel should be drawn
+                if self.grid[i][j] == 1:
+                    colour = [255, 255, 255]  # white
+                pygame.draw.rect(
+                    self.screen, colour, 
+                    [j*self.scale, i*self.scale, self.scale, self.scale], 0
+                )
+        pygame.display.flip()
     # <--- Keyboard Functionality --->
-    def keyboard(self, event_overide: pygame.event.Event=None):
+    def keyboard_control(self, event_overide: pygame.event.Event=None):
         for event in pygame.event.get():
             if event_overide:  # set the loop event to the custom event (this may serve useful for later on)
                 event=event_overide
@@ -294,11 +310,22 @@ class Chip8:
         for index, value in enumerate(data):
             self.memory[offset+index] = value
     # <--- Processor Cycle Functionality -->
-    def run(self, speed: int=16*16):
-        for _ in range(speed):
-            self.fetch_instr()
+    def run(self):
+        clock = pygame.time.Clock()
+        iter = 0
+        while True:
+            try:
+                clock.tick(300)
+                self.keyboard_control()
+                self.fetch_instr()
+                self.display_loop()
+                iter += 1
+            except Exception as e:
+                print(e)
+                print(iter)
+                break
 
 
 if __name__ == '__main__':
-    cpu = Chip8(5, 'Pong.ch8')
+    cpu = Chip8(10, 'Pong.ch8')
     cpu.run()
