@@ -17,6 +17,7 @@ from collections import deque
 
 class Chip8:
     def __init__(self, scale, filename):
+        self.cycles = 0
         self.filename = filename
         self.memory = np.zeros(4096, np.uint8)#bytearray(4096)  # memory/RAM
         self.pc = 0x200  # program counter  (starts at 512 or 0x200)
@@ -86,9 +87,10 @@ class Chip8:
                 print("Instruction 0NNN has not be implemented")
             else:
                 if opcode == '00e0':
-                    self.grid = np.zeros([64, 32], np.int16)
+                    self.grid = np.zeros([32, 64], np.int8)
                 elif opcode == '00ee':
                     self.pc = self.stack.popleft()
+                    self.sp -= 1
         elif opcode[0] == '1':  # [1NNN] -> jump routine
             self.pc = int(opcode[1:], 16) - 2
         elif opcode[0] == '2':  # [2NNN] -> call subroutines
@@ -108,6 +110,7 @@ class Chip8:
             self.register['v'+opcode[1]] = int(opcode[2:], 16)
         elif opcode[0] == '7':  # [7XNN] -> arthimetic: adds NN to VX, and stores the value in VX (carry flag does not change)
             self.register['v'+opcode[1]] += int(opcode[2:], 16)
+            self.register['v'+opcode[1]] &= 0xFF  # enforce 8-bit wrap-around
         elif opcode[0] == '8':  # [8XY-] -> arthimetic: logical operations 
             if opcode[3] == '0':  # set VX = VY
                self.register['v'+opcode[1]] = self.register['v'+opcode[2]] 
@@ -118,35 +121,30 @@ class Chip8:
             elif opcode[3] == '3':  # set VX = (VX XOR VY)
                 self.register['v'+opcode[1]] = self.register['v'+opcode[1]] ^ self.register['v'+opcode[2]]
             elif opcode[3] == '4':  # set VX = VX + VY, carry flag used
-                '''
-                Probably did this wrong
-                '''
                 temp = self.register['v'+opcode[1]] + self.register['v'+opcode[2]]
-                if temp > 254:  # if value is greater than 8-bits, set carry flag
+                if temp > 255:  # if value is greater than 8-bits, set carry flag
                     self.register['vf'] = 1
-                    self.register['v'+opcode[1]] = (temp << 8) & 0xFF  # only the lower 8-bits should be stored
                 else: 
                     self.register['vf'] = 0
-                    self.register['v'+opcode[1]] = temp
+                self.register['v'+opcode[1]] = temp & 0xFF
             elif opcode[3] == '5':  # set VX = VX-VY, carry flag used
-                '''
-                Probably did this wrong too
-                '''
-                if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
+                if self.register['v'+opcode[1]] >= self.register['v'+opcode[2]]:  # if VY>VX
                     self.register['vf'] = 1
                 else:
                     self.register['vf'] = 0
-                self.register['v'+opcode[1]] =- self.register['v'+opcode[2]]
+                self.register['v'+opcode[1]] -= self.register['v'+opcode[2]]
+                self.register['v'+opcode[1]] &= 0xFF
             elif opcode[3] == '6':  # Set Vx = Vx SHR 1
                 # if the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0
                 self.register['vf'] = self.register['v'+opcode[1]] & 0x1
                 self.register['v'+opcode[1]] >>= 1  # shift right
             elif opcode[3] == '7':  # set VX = VY-VX, carry flag used
-                if self.register['v'+opcode[2]] > self.register['v'+opcode[1]]:  # if VY>VX
+                if self.register['v'+opcode[2]] >= self.register['v'+opcode[1]]:  # if VY>VX
                     self.register['vf'] = 1
                 else:
                     self.register['vf'] = 0
                 self.register['v'+opcode[1]] = self.register['v'+opcode[2]] - self.register['v'+opcode[1]]
+                self.register['v'+opcode[1]] &= 0xFF
             elif opcode[3] == 'E':  # Set Vx = Vx SHL 1
                 # if the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0
                 self.register['vf'] = (self.register['v'+opcode[1]] & 0x80) >> 7   # either 7 or 8
@@ -212,28 +210,18 @@ class Chip8:
                 self.memory[self.index] = bcd // 100
                 self.memory[self.index + 1] = (bcd // 10) % 10
                 self.memory[self.index + 2] = bcd % 10
-                print(self.memory[self.index])
-                print(self.memory[self.index+1])
-                print(self.memory[self.index+2])
             elif opcode[2:] == '55':  # store registers V0 through Vx in memory starting at location I
-                for i in range(int(opcode[1])+1, 16):
+                limit = int(opcode[1], 16) + 1
+                for i in range(limit):
                     reg = hex(i)[2:]
                     self.memory[self.index + i] = self.register[f'v{reg}']
             elif opcode[2:] == '65':  # read registers V0 through Vx from memory starting at location I
-                for i in range(int(opcode[1])+1):
+                limit = int(opcode[1], 16) + 1
+                for i in range(limit):
                     reg = hex(i)[2:]
                     self.register[f'v{reg}'] = self.memory[self.index + i]
         # increment the program counter by 2 after each operation
-        self.pc += 2  
-        # increment the timers if they contain non-zero values 
-        while self.timers != 0:
-            if self.timers['dt'] == 0:
-                break
-            self.timers['dt'] -= 1
-        while self.timers != 0:
-            if self.timers['st'] == 0:
-                break
-            self.timers['st'] -= 1
+        self.pc += 2
     # <--- Fetch --->
     def fetch_instr(self, operation: str=None):
         #self.index = self.pc
@@ -260,7 +248,7 @@ class Chip8:
                         if self.grid[vy+i][vx+j] == 1:
                             collided = True
                         self.grid[vy + i][vx + j] ^= 1
-                    except:
+                    except Exception as e:
                         continue
         if collided:
             self.draw_flag = True
@@ -312,20 +300,27 @@ class Chip8:
     # <--- Processor Cycle Functionality -->
     def run(self):
         clock = pygame.time.Clock()
-        iter = 0
         while True:
             try:
                 clock.tick(300)
                 self.keyboard_control()
                 self.fetch_instr()
                 self.display_loop()
-                iter += 1
+
+                # decrement timers at ~60Hz (every 5 cycles at 300Hz)
+                if self.cycles % 5 == 0:
+                    if self.timers['dt'] > 0:
+                        self.timers['dt'] -= 1
+                    if self.timers['st'] > 0:
+                        self.timers['st'] -= 1
+
+                self.cycles += 1
             except Exception as e:
                 print(e)
-                print(iter)
+                print(self.cycles)
                 break
 
 
 if __name__ == '__main__':
-    cpu = Chip8(10, 'Pong.ch8')
+    cpu = Chip8(10, 'programs/Pong.ch8')
     cpu.run()
